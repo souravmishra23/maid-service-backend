@@ -1,0 +1,43 @@
+name: Build and Deploy to GKE
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build Docker and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: 17
+
+      - name: Build JAR
+        run: ./gradlew bootJar
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up GCloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker
+
+      - name: Build and Push Docker image
+        run: |
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT }}/maid-service .
+          docker push gcr.io/${{ secrets.GCP_PROJECT }}/maid-service
+
+      - name: Deploy to GKE
+        run: |
+          gcloud container clusters get-credentials maid-cluster --zone us-central1-a
+          kubectl apply -f deployment.yaml
+          kubectl apply -f service.yaml
